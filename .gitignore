@@ -1096,3 +1096,4 @@ express-app/node_modules/whatwg-url/webidl2js-wrapper.js
 express-app/package-lock.json
 express-app/package.json
 express-app/env.env
+/express-app/node_modules
