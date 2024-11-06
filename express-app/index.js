@@ -15,6 +15,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Static file middleware for images
+app.use('/images', express.static('images', {
+  fallthrough: false, // Prevents moving to next middleware if file not found
+}));
+
+// Error handling for static files
+app.use((err, req, res, next) => {
+  if (err) {
+    if (err.code === 'ENOENT') {
+      res.status(404).json({ error: 'Image not found' });
+    } else {
+      res.status(500).json({ error: 'Server error' });
+    }
+  } else {
+    next();
+  }
+});
+
 // Simple GET route for the root URL
 app.get('/', (req, res) => {
   res.send('Hello World! Welcome to Express.js');
