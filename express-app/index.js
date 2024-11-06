@@ -25,6 +25,13 @@ app.get('/about', (req, res) => {
   res.send('This is the About page');
 });
 
+const lessonRoutes = require('./routes/lessonRoutes');
+const orderRoutes = require('./routes/orderRoutes');
+
+// Use the routes
+app.use('/', lessonRoutes);
+app.use('/', orderRoutes);
+
 // Connection to MongoDB
 let db;
 
