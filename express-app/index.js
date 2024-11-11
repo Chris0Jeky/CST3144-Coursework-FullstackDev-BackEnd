@@ -33,6 +33,11 @@ app.use((err, req, res, next) => {
   }
 });
 
+// Catch-all route for undefined endpoints
+app.use((req, res) => {
+    res.status(404).json({ error: 'Endpoint not found' });
+});
+
 // Simple GET route for the root URL
 app.get('/', (req, res) => {
   res.send('Hello World! Welcome to Express.js');
