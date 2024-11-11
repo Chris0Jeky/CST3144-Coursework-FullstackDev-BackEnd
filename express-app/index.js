@@ -38,6 +38,12 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });
 });
 
+// Error-handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something went wrong!' });
+});
+
 // Simple GET route for the root URL
 app.get('/', (req, res) => {
   res.send('Hello World! Welcome to Express.js');
