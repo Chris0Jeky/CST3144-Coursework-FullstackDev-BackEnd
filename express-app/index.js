@@ -64,7 +64,7 @@ app.use('/', orderRoutes);
 // Connection to MongoDB
 let db;
 
-MongoClient.connect(process.env.MONGODB_URI, { useUnifiedTopology: true })
+MongoClient.connect(process.env.MONGODB_URI)
     .then((client) => {
       db = client.db(); // Select the database
       console.log('Connected to MongoDB Atlas');
