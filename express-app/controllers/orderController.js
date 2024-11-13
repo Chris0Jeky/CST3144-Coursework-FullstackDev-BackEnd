@@ -83,6 +83,19 @@ async function createOrder(req, res) {
     }
 }
 
+async function getAllOrders(req, res) {
+    const db = req.app.locals.db;
+    const ordersCollection = getOrdersCollection(db);
+
+    try {
+        const orders = await ordersCollection.find({}).toArray();
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
 module.exports = {
     createOrder,
+    getAllOrders,
 };
