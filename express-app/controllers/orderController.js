@@ -1,25 +1,50 @@
 const { ObjectId } = require('mongodb');
+const { getOrdersCollection } = require('../models/orderModel');
+const { getLessonsCollection } = require('../models/lessonModel');
 
-function createOrder(req, res) {
-    const ordersCollection = db.collection('orders');
-    const lessonsCollection = db.collection('lessons');
+async function createOrder(req, res) {
+    const db = req.app.locals.db; // Access the db instance from app.locals
+    const ordersCollection = getOrdersCollection(db);
+    const lessonsCollection = getLessonsCollection(db);
     const { name, phone, lessons } = req.body;
 
-    if (!name || !phone || !lessons || !Array.isArray(lessons)) {
-        return res.status(400).json({ error: 'Invalid order data' });
+    // Basic validation
+    if (typeof name !== 'string' || name.trim() === '') {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const phoneRegex = /^[0-9]{10}$/; // Adjust regex as needed
+    if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ error: 'Valid phone number is required' });
+    }
+
+    if (!Array.isArray(lessons) || lessons.length === 0) {
+        return res.status(400).json({ error: 'At least one lesson is required' });
+    }
+
+    for (const item of lessons) {
+        if (!item.lessonId || !ObjectId.isValid(item.lessonId)) {
+            return res.status(400).json({ error: 'Valid lesson ID is required' });
+        }
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            return res.status(400).json({ error: 'Quantity must be a positive integer' });
+        }
     }
 
     // Start a session for transaction
     const session = db.client.startSession();
 
-    session.withTransaction(async () => {
-        try {
+    try {
+        await session.withTransaction(async () => {
             // Check and update each lesson
             for (const item of lessons) {
                 const lessonId = item.lessonId;
                 const quantity = item.quantity;
 
-                const lesson = await lessonsCollection.findOne({ _id: new ObjectId(lessonId) }, { session });
+                const lesson = await lessonsCollection.findOne(
+                    { _id: new ObjectId(lessonId) },
+                    { session }
+                );
 
                 if (!lesson) {
                     throw new Error(`Lesson not found: ${lessonId}`);
@@ -48,43 +73,16 @@ function createOrder(req, res) {
             await ordersCollection.insertOne(orderData, { session });
 
             res.status(201).json({ message: 'Order created successfully' });
-        } catch (err) {
-            await session.abortTransaction();
-            res.status(500).json({ error: err.message });
-        } finally {
-            await session.endSession();
-        }
-    });
+        });
+    } catch (err) {
+        await session.abortTransaction();
+        console.error('Transaction error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        await session.endSession();
+    }
 }
 
 module.exports = {
     createOrder,
 };
-
-
-function createOrder(req, res) {
-
-    // Basic validation
-    if (typeof name !== 'string' || name.trim() === '') {
-        return res.status(400).json({ error: 'Name is required' });
-    }
-
-    const phoneRegex = /^[0-9]{10}$/; // Adjust regex as needed
-    if (!phoneRegex.test(phone)) {
-        return res.status(400).json({ error: 'Valid phone number is required' });
-    }
-
-    if (!Array.isArray(lessons) || lessons.length === 0) {
-        return res.status(400).json({ error: 'At least one lesson is required' });
-    }
-
-    for (const item of lessons) {
-        if (!item.lessonId || !ObjectId.isValid(item.lessonId)) {
-            return res.status(400).json({ error: 'Valid lesson ID is required' });
-        }
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-            return res.status(400).json({ error: 'Quantity must be a positive integer' });
-        }
-    }
-
-}
