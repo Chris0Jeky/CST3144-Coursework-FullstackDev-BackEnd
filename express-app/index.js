@@ -66,14 +66,17 @@ let db;
 
 MongoClient.connect(process.env.MONGODB_URI)
     .then((client) => {
-      db = client.db(); // Select the database
-      console.log('Connected to MongoDB Atlas');
+        const db = client.db(); // Select the database
+        console.log('Connected to MongoDB Atlas');
 
-      // Start the server after the database connection is ready
-      app.listen(port, () => {
-        console.log(`Server running at http://localhost:${port}`);
-      });
+        // Store db in app.locals
+        app.locals.db = db;
+
+        // Start the server after the database connection is ready
+        app.listen(port, () => {
+            console.log(`Server running at http://localhost:${port}`);
+        });
     })
     .catch((err) => {
-      console.error('Failed to connect to MongoDB Atlas', err);
+        console.error('Failed to connect to MongoDB Atlas', err);
     });
