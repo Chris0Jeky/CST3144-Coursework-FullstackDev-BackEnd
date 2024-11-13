@@ -1,4 +1,4 @@
-function getLessonsCollection() {
+function getLessonsCollection(db) {
     return db.collection('lessons');
 }
 

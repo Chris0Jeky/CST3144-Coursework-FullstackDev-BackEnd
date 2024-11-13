@@ -1,4 +1,4 @@
-function getOrdersCollection() {
+function getOrdersCollection(db) {
     return db.collection('orders');
 }
 
