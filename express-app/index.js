@@ -33,16 +33,12 @@ app.use((err, req, res, next) => {
   }
 });
 
-// Catch-all route for undefined endpoints
-app.use((req, res) => {
-    res.status(404).json({ error: 'Endpoint not found' });
-});
+const lessonRoutes = require('./routes/lessonRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
-// Error-handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something went wrong!' });
-});
+// Use the routes
+app.use('/', lessonRoutes);
+app.use('/', orderRoutes);
 
 // Simple GET route for the root URL
 app.get('/', (req, res) => {
@@ -54,12 +50,16 @@ app.get('/about', (req, res) => {
   res.send('This is the About page');
 });
 
-const lessonRoutes = require('./routes/lessonRoutes');
-const orderRoutes = require('./routes/orderRoutes');
+// Catch-all route for undefined endpoints
+app.use((req, res) => {
+    res.status(404).json({ error: 'Endpoint not found' });
+});
 
-// Use the routes
-app.use('/', lessonRoutes);
-app.use('/', orderRoutes);
+// Error-handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something went wrong!' });
+});
 
 // Connection to MongoDB
 let db;
