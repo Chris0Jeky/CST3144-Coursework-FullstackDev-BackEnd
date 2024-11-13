@@ -77,7 +77,3 @@ MongoClient.connect(process.env.MONGODB_URI)
     .catch((err) => {
       console.error('Failed to connect to MongoDB Atlas', err);
     });
-
-// After successful connection
-db = client.db(); // Select the database
-module.exports = db; // Export db
