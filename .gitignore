@@ -1099,3 +1099,8 @@ package.json
 /express-app/node_modules
 *.iml
 /node_modules/
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
