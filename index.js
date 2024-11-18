@@ -2,12 +2,20 @@
 require('dotenv').config();
 
 const express = require('express');
+const cors = require('cors');
 const { MongoClient } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware to parse JSON payloads
 app.use(express.json());
+
+// cors
+app.use(cors());
+
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+});
 
 // Middleware to log every request
 app.use((req, res, next) => {
