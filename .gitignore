@@ -1093,8 +1093,6 @@ express-app/node_modules/whatwg-url/LICENSE.txt
 express-app/node_modules/whatwg-url/package.json
 express-app/node_modules/whatwg-url/README.md
 express-app/node_modules/whatwg-url/webidl2js-wrapper.js
-package-lock.json
-package.json
 /express-app/node_modules
 *.iml
 /node_modules/
