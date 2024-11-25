@@ -88,12 +88,7 @@ async function getAllOrders(req, res) {
     const ordersCollection = getOrdersCollection(db);
 
     try {
-        const orders = await ordersCollection.find({}).toArray();
-        res.json(orders);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-}
+        const orders = await
 
 module.exports = {
     createOrder,
