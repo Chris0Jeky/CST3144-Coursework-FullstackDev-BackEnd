@@ -5,12 +5,22 @@ function getAllLessons(req, res) {
     const db = req.app.locals.db; // Access db from app locals
     const lessonsCollection = getLessonsCollection(db);
 
-    const { topic, location, price } = req.query;
+    const { topic, location, price, search } = req.query;
     let filter = {};
 
     if (topic) filter.topic = topic;
     if (location) filter.location = location;
     if (price) filter.price = parseFloat(price);
+
+    if (search) {
+        const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
+        filter.$or = [
+            { topic: { $regex: searchRegex } },
+            { location: { $regex: searchRegex } },
+            { price: { $regex: searchRegex } },
+            { space: { $regex: searchRegex } }
+        ];
+    }
 
     lessonsCollection.find(filter).toArray()
         .then((lessons) => {
@@ -20,6 +30,7 @@ function getAllLessons(req, res) {
             res.status(500).json({ error: err.message });
         });
 }
+
 
 function updateLesson(req, res) {
     const db = req.app.locals.db;
