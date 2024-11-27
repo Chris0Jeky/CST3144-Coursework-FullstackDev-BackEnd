@@ -38,22 +38,9 @@ function updateLesson(req, res) {
     const lessonId = req.params.id;
     const updateData = req.body;
 
-    // Validate if updateData is provided
-    if (!updateData || Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: 'No update data provided' });
-    }
-
-    // Ensure that updateData uses valid MongoDB operators
-    const validOperators = ['$set', '$inc'];
-    const hasValidOperator = Object.keys(updateData).some(key => validOperators.includes(key));
-
-    if (!hasValidOperator) {
-        return res.status(400).json({ error: 'Invalid update operator. Use $set or $inc.' });
-    }
-
     lessonsCollection.updateOne(
         { _id: new ObjectId(lessonId) },
-        updateData // Use the updateData as is
+        { $set: updateData }
     )
         .then((result) => {
             if (result.matchedCount === 0) {
