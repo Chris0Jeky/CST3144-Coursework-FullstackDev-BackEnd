@@ -15,7 +15,7 @@ async function createOrder(req, res) {
 
     const phoneRegex = /^[0-9]{10}$/; // Adjust regex as needed
     if (!phoneRegex.test(phone)) {
-        return res.status(400).json({ error: 'Valid phone number is required' });
+        return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
     }
 
     if (!Array.isArray(lessons) || lessons.length === 0) {
