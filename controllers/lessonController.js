@@ -36,22 +36,24 @@ function updateLesson(req, res) {
     const db = req.app.locals.db;
     const lessonsCollection = getLessonsCollection(db);
     const lessonId = req.params.id;
-    const delta = req.body.delta;
+    const updateData = req.body;
 
-    // Validate delta
-    if (delta === undefined || typeof delta !== 'number') {
-        return res.status(400).json({ error: 'Invalid delta value' });
+    // Validate if updateData is provided
+    if (!updateData || Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: 'No update data provided' });
     }
 
-    const updateData = {
-        $inc: {
-            space: delta
-        }
-    };
+    // Ensure that updateData uses valid MongoDB operators
+    const validOperators = ['$set', '$inc'];
+    const hasValidOperator = Object.keys(updateData).some(key => validOperators.includes(key));
+
+    if (!hasValidOperator) {
+        return res.status(400).json({ error: 'Invalid update operator. Use $set or $inc.' });
+    }
 
     lessonsCollection.updateOne(
         { _id: new ObjectId(lessonId) },
-        updateData
+        updateData // Use the updateData as is
     )
         .then((result) => {
             if (result.matchedCount === 0) {
@@ -64,7 +66,6 @@ function updateLesson(req, res) {
             res.status(500).json({ error: err.message });
         });
 }
-
 
 module.exports = {
     getAllLessons,
