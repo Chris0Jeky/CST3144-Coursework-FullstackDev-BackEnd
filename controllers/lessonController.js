@@ -35,9 +35,12 @@ async function getAllLessons(req, res) {
         if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
     }
 
-    // Available spaces filter
+    // Available spaces filter (handle both 'spaces' and 'space' fields)
     if (minSpaces) {
-        filter.spaces = { $gte: parseInt(minSpaces) };
+        filter.$or = [
+            { spaces: { $gte: parseInt(minSpaces) } },
+            { space: { $gte: parseInt(minSpaces) } }
+        ];
     }
 
     // Search filter (searches across multiple fields)
@@ -70,12 +73,17 @@ async function getAllLessons(req, res) {
             .limit(parseInt(limit))
             .toArray();
 
-        // Add additional computed fields
-        const enhancedLessons = lessons.map(lesson => ({
-            ...lesson,
-            available: lesson.spaces > 0,
-            imageUrl: `/images/${lesson.image || 'default.gif'}`
-        }));
+        // Add additional computed fields and normalize space/spaces field
+        const enhancedLessons = lessons.map(lesson => {
+            const availableSpaces = lesson.spaces !== undefined ? lesson.spaces : (lesson.space || 0);
+            return {
+                ...lesson,
+                spaces: availableSpaces,  // Normalize to 'spaces'
+                space: availableSpaces,   // Keep 'space' for backward compatibility
+                available: availableSpaces > 0,
+                imageUrl: `/images/${lesson.image || 'default.gif'}`
+            };
+        });
 
         res.json({
             status: 'success',
@@ -111,12 +119,15 @@ async function getLessonById(req, res) {
             throw new AppError('Lesson not found', 404);
         }
 
+        const availableSpaces = lesson.spaces !== undefined ? lesson.spaces : (lesson.space || 0);
         res.json({
             status: 'success',
             data: {
                 lesson: {
                     ...lesson,
-                    available: lesson.spaces > 0,
+                    spaces: availableSpaces,  // Normalize to 'spaces'
+                    space: availableSpaces,   // Keep 'space' for backward compatibility
+                    available: availableSpaces > 0,
                     imageUrl: `/images/${lesson.image || 'default.gif'}`
                 }
             }
