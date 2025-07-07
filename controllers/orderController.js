@@ -37,17 +37,25 @@ async function createOrder(req, res) {
                     throw new AppError(`Lesson not found: ${item.lessonId}`, 404);
                 }
 
-                if (lesson.spaces < quantity) {
+                const availableSpaces = lesson.spaces !== undefined ? lesson.spaces : (lesson.space || 0);
+                if (availableSpaces < quantity) {
                     throw new AppError(
-                        `Not enough spaces available for ${lesson.topic}. Available: ${lesson.spaces}, Requested: ${quantity}`,
+                        `Not enough spaces available for ${lesson.topic}. Available: ${availableSpaces}, Requested: ${quantity}`,
                         400
                     );
                 }
 
-                // Update lesson spaces
+                // Update lesson spaces (handle both 'spaces' and 'space' fields)
+                const spaceField = lesson.spaces !== undefined ? 'spaces' : 'space';
+                const updateQuery = { _id: lessonId };
+                updateQuery[spaceField] = { $gte: quantity };
+                
+                const updateObj = { $inc: {} };
+                updateObj.$inc[spaceField] = -quantity;
+                
                 const updateResult = await lessonsCollection.updateOne(
-                    { _id: lessonId, spaces: { $gte: quantity } },
-                    { $inc: { spaces: -quantity } },
+                    updateQuery,
+                    updateObj,
                     { session }
                 );
 
