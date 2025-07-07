@@ -13,6 +13,11 @@ const { errorHandler } = require('./middleware/errorHandler');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Trust proxy for Render deployment
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // Security middleware
 app.use(helmet());
 
@@ -33,7 +38,7 @@ app.use('/api/', limiter);
 // CORS configuration
 const corsOptions = {
     origin: process.env.NODE_ENV === 'production' 
-        ? ['https://your-github-pages-url.github.io'] // Replace with your actual GitHub Pages URL
+        ? ['https://chris0jeky.github.io', 'https://your-github-pages-url.github.io'] // Add your actual URLs
         : true,
     credentials: true,
     optionsSuccessStatus: 200
