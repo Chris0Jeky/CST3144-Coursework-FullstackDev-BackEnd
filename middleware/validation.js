@@ -16,6 +16,7 @@ const lessonValidationRules = {
     updateLesson: [
         param('id').isMongoId().withMessage('Invalid lesson ID'),
         body('spaces').optional().isInt({ min: 0 }).withMessage('Spaces must be a non-negative integer'),
+        body('space').optional().isInt({ min: 0 }).withMessage('Space must be a non-negative integer'),
         body('price').optional().isFloat({ min: 0 }).withMessage('Price must be a positive number'),
         body('topic').optional().isString().trim().notEmpty().withMessage('Topic cannot be empty'),
         body('location').optional().isString().trim().notEmpty().withMessage('Location cannot be empty')
