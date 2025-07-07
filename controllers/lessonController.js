@@ -1,83 +1,248 @@
 const { ObjectId } = require('mongodb');
 const { getLessonsCollection } = require('../models/lessonModel');
+const { AppError } = require('../middleware/errorHandler');
 
-// Controller function to get all lessons
-function getAllLessons(req, res) {
-    const db = req.app.locals.db; // Access db from app locals
+// Controller function to get all lessons with advanced filtering
+async function getAllLessons(req, res) {
+    const db = req.app.locals.db;
     const lessonsCollection = getLessonsCollection(db);
 
     // Extract query parameters
-    const { topic, location, price, search, sortAttribute, sortOrder } = req.query;
+    const { 
+        search, 
+        sortBy = 'topic', 
+        order = 'asc',
+        minPrice,
+        maxPrice,
+        minSpaces,
+        topic,
+        location,
+        page = 1,
+        limit = 20
+    } = req.query;
+
+    // Build filter object
     let filter = {};
 
-    // Apply filters based on query parameters
+    // Topic and location filters
     if (topic) filter.topic = topic;
     if (location) filter.location = location;
-    if (price) filter.price = parseFloat(price);
 
-    // If search query is present, add regex filters
+    // Price range filter
+    if (minPrice || maxPrice) {
+        filter.price = {};
+        if (minPrice) filter.price.$gte = parseFloat(minPrice);
+        if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    // Available spaces filter
+    if (minSpaces) {
+        filter.spaces = { $gte: parseInt(minSpaces) };
+    }
+
+    // Search filter (searches across multiple fields)
     if (search) {
-        const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
+        const searchRegex = new RegExp(search, 'i');
         filter.$or = [
-            { topic: { $regex: searchRegex } },
-            { location: { $regex: searchRegex } },
-            { price: { $regex: searchRegex } },
-            { space: { $regex: searchRegex } }
+            { topic: searchRegex },
+            { location: searchRegex },
+            { description: searchRegex }
         ];
     }
 
-    // Apply sorting options
-    let sortOptions = {};
-    if (sortAttribute) {
-        const order = sortOrder === 'desc' ? -1 : 1;
-        sortOptions[sortAttribute] = order;
-    }
+    // Sorting
+    const sortOptions = {
+        [sortBy]: order === 'desc' ? -1 : 1
+    };
 
-    // Fetch lessons from the database
-    lessonsCollection.find(filter).sort(sortOptions).toArray()
-        .then((lessons) => {
-            res.json(lessons); // Send lessons as JSON response
-        })
-        .catch((err) => {
-            res.status(500).json({ error: err.message }); // Handle errors
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    try {
+        // Get total count for pagination
+        const totalCount = await lessonsCollection.countDocuments(filter);
+
+        // Fetch lessons with pagination
+        const lessons = await lessonsCollection
+            .find(filter)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray();
+
+        // Add additional computed fields
+        const enhancedLessons = lessons.map(lesson => ({
+            ...lesson,
+            available: lesson.spaces > 0,
+            imageUrl: `/images/${lesson.image || 'default.gif'}`
+        }));
+
+        res.json({
+            status: 'success',
+            data: {
+                lessons: enhancedLessons,
+                pagination: {
+                    total: totalCount,
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    pages: Math.ceil(totalCount / parseInt(limit))
+                }
+            }
         });
+    } catch (err) {
+        throw new AppError('Failed to fetch lessons', 500);
+    }
 }
 
-// Controller function to update a lesson
-function updateLesson(req, res) {
+// Get single lesson by ID
+async function getLessonById(req, res) {
     const db = req.app.locals.db;
     const lessonsCollection = getLessonsCollection(db);
-    const lessonId = req.params.id;
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+        throw new AppError('Invalid lesson ID format', 400);
+    }
+
+    try {
+        const lesson = await lessonsCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!lesson) {
+            throw new AppError('Lesson not found', 404);
+        }
+
+        res.json({
+            status: 'success',
+            data: {
+                lesson: {
+                    ...lesson,
+                    available: lesson.spaces > 0,
+                    imageUrl: `/images/${lesson.image || 'default.gif'}`
+                }
+            }
+        });
+    } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('Failed to fetch lesson', 500);
+    }
+}
+
+// Update lesson
+async function updateLesson(req, res) {
+    const db = req.app.locals.db;
+    const lessonsCollection = getLessonsCollection(db);
+    const { id } = req.params;
     const updateData = req.body;
 
-    // Validate if updateData is provided
-    if (!updateData || Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: 'No update data provided' });
+    if (!ObjectId.isValid(id)) {
+        throw new AppError('Invalid lesson ID format', 400);
     }
 
-    // Ensure that 'space' is a number if it's being updated
-    if (updateData.space && typeof updateData.space !== 'number') {
-        return res.status(400).json({ error: 'Space must be a number' });
+    // Remove undefined fields
+    Object.keys(updateData).forEach(key => 
+        updateData[key] === undefined && delete updateData[key]
+    );
+
+    if (Object.keys(updateData).length === 0) {
+        throw new AppError('No valid update data provided', 400);
     }
 
-    // Update the lesson in the database
-    lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $set: updateData } // Use $set operator to update fields
-    )
-        .then((result) => {
-            if (result.matchedCount === 0) {
-                res.status(404).json({ error: 'Lesson not found' }); // Handle not found
-            } else {
-                res.json({ message: 'Lesson updated successfully' }); // Success message
+    try {
+        const result = await lessonsCollection.findOneAndUpdate(
+            { _id: new ObjectId(id) },
+            { $set: updateData },
+            { returnDocument: 'after' }
+        );
+
+        if (!result.value) {
+            throw new AppError('Lesson not found', 404);
+        }
+
+        res.json({
+            status: 'success',
+            message: 'Lesson updated successfully',
+            data: {
+                lesson: result.value
             }
-        })
-        .catch((err) => {
-            res.status(500).json({ error: err.message }); // Handle errors
         });
+    } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('Failed to update lesson', 500);
+    }
+}
+
+// Get lesson statistics
+async function getLessonStats(req, res) {
+    const db = req.app.locals.db;
+    const lessonsCollection = getLessonsCollection(db);
+
+    try {
+        const stats = await lessonsCollection.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalLessons: { $sum: 1 },
+                    totalSpaces: { $sum: '$spaces' },
+                    avgPrice: { $avg: '$price' },
+                    minPrice: { $min: '$price' },
+                    maxPrice: { $max: '$price' },
+                    lessonsWithSpaces: {
+                        $sum: { $cond: [{ $gt: ['$spaces', 0] }, 1, 0] }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    totalLessons: 1,
+                    totalSpaces: 1,
+                    avgPrice: { $round: ['$avgPrice', 2] },
+                    minPrice: 1,
+                    maxPrice: 1,
+                    lessonsWithSpaces: 1,
+                    percentageAvailable: {
+                        $round: [
+                            { $multiply: [
+                                { $divide: ['$lessonsWithSpaces', '$totalLessons'] },
+                                100
+                            ]},
+                            2
+                        ]
+                    }
+                }
+            }
+        ]).toArray();
+
+        // Get lessons by topic
+        const byTopic = await lessonsCollection.aggregate([
+            {
+                $group: {
+                    _id: '$topic',
+                    count: { $sum: 1 },
+                    totalSpaces: { $sum: '$spaces' },
+                    avgPrice: { $avg: '$price' }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            }
+        ]).toArray();
+
+        res.json({
+            status: 'success',
+            data: {
+                overview: stats[0] || {},
+                byTopic: byTopic
+            }
+        });
+    } catch (err) {
+        throw new AppError('Failed to fetch lesson statistics', 500);
+    }
 }
 
 module.exports = {
     getAllLessons,
+    getLessonById,
     updateLesson,
+    getLessonStats
 };
