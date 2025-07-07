@@ -11,6 +11,11 @@ router.get('/',
     asyncHandler(lessonController.getAllLessons)
 );
 
+// Route to get lesson statistics (must be before /:id)
+router.get('/stats/overview',
+    asyncHandler(lessonController.getLessonStats)
+);
+
 // Route to get a single lesson by ID
 router.get('/:id',
     asyncHandler(lessonController.getLessonById)
@@ -21,11 +26,6 @@ router.put('/:id',
     lessonValidationRules.updateLesson,
     validate,
     asyncHandler(lessonController.updateLesson)
-);
-
-// Route to get lesson statistics
-router.get('/stats/overview',
-    asyncHandler(lessonController.getLessonStats)
 );
 
 module.exports = router;
