@@ -154,6 +154,13 @@ async function updateLesson(req, res) {
         updateData[key] === undefined && delete updateData[key]
     );
 
+    // Handle both 'space' and 'spaces' fields
+    if (updateData.space !== undefined && updateData.spaces === undefined) {
+        updateData.spaces = updateData.space;
+    } else if (updateData.spaces !== undefined && updateData.space === undefined) {
+        updateData.space = updateData.spaces;
+    }
+
     if (Object.keys(updateData).length === 0) {
         throw new AppError('No valid update data provided', 400);
     }
