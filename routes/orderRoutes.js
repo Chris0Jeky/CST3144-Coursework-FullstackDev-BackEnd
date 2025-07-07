@@ -11,6 +11,11 @@ router.post('/',
     asyncHandler(orderController.createOrder)
 );
 
+// Route to get order statistics (must be before /:id)
+router.get('/stats/overview',
+    asyncHandler(orderController.getOrderStats)
+);
+
 // Route to get all orders (admin)
 router.get('/',
     asyncHandler(orderController.getAllOrders)
@@ -19,11 +24,6 @@ router.get('/',
 // Route to get order by ID
 router.get('/:id',
     asyncHandler(orderController.getOrderById)
-);
-
-// Route to get order statistics
-router.get('/stats/overview',
-    asyncHandler(orderController.getOrderStats)
 );
 
 module.exports = router;
