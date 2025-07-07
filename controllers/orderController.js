@@ -1,105 +1,275 @@
 const { ObjectId } = require('mongodb');
 const { getOrdersCollection } = require('../models/orderModel');
 const { getLessonsCollection } = require('../models/lessonModel');
+const { AppError } = require('../middleware/errorHandler');
 
-// Controller function to create a new order
+// Create a new order with transaction support
 async function createOrder(req, res) {
-    const db = req.app.locals.db; // Access the db instance from app.locals
+    const db = req.app.locals.db;
+    const client = req.app.locals.client;
     const ordersCollection = getOrdersCollection(db);
     const lessonsCollection = getLessonsCollection(db);
     const { name, phone, lessons } = req.body;
 
-    // Basic validation
-    if (typeof name !== 'string' || name.trim() === '') {
-        return res.status(400).json({ error: 'Name is required' });
-    }
-
-    const phoneRegex = /^[0-9]{10}$/; // Requires exactly 10 digits
-    if (!phoneRegex.test(phone)) {
-        return res.status(400).json({ error: 'Valid phone number is required (exactly 10 digits)' });
-    }
-
-    if (!Array.isArray(lessons) || lessons.length === 0) {
-        return res.status(400).json({ error: 'At least one lesson is required' });
-    }
-
-    // Validate each lesson in the order
-    for (const item of lessons) {
-        if (!item.lessonId || !ObjectId.isValid(item.lessonId)) {
-            return res.status(400).json({ error: 'Valid lesson ID is required' });
-        }
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-            return res.status(400).json({ error: 'Quantity must be a positive integer' });
-        }
-    }
-
     // Start a session for transaction
-    const session = db.client.startSession();
+    const session = client.startSession();
 
     try {
+        let orderResult;
+        
         await session.withTransaction(async () => {
-            // Check and update each lesson
+            // Track total amount
+            let totalAmount = 0;
+            const lessonDetails = [];
+
+            // Validate and update each lesson
             for (const item of lessons) {
-                const lessonId = item.lessonId;
+                const lessonId = new ObjectId(item.lessonId);
                 const quantity = item.quantity;
 
-                // Find the lesson
+                // Find and lock the lesson
                 const lesson = await lessonsCollection.findOne(
-                    { _id: new ObjectId(lessonId) },
+                    { _id: lessonId },
                     { session }
                 );
 
                 if (!lesson) {
-                    throw new Error(`Lesson not found: ${lessonId}`);
+                    throw new AppError(`Lesson not found: ${item.lessonId}`, 404);
                 }
 
-                if (lesson.space < quantity) {
-                    throw new Error(`Not enough spaces for lesson: ${lesson.topic}`);
+                if (lesson.spaces < quantity) {
+                    throw new AppError(
+                        `Not enough spaces available for ${lesson.topic}. Available: ${lesson.spaces}, Requested: ${quantity}`,
+                        400
+                    );
                 }
 
                 // Update lesson spaces
-                await lessonsCollection.updateOne(
-                    { _id: new ObjectId(lessonId) },
-                    { $inc: { space: -quantity } }, // Decrement space
+                const updateResult = await lessonsCollection.updateOne(
+                    { _id: lessonId, spaces: { $gte: quantity } },
+                    { $inc: { spaces: -quantity } },
                     { session }
                 );
+
+                if (updateResult.modifiedCount === 0) {
+                    throw new AppError('Failed to update lesson spaces', 500);
+                }
+
+                // Calculate amount and store details
+                const lessonAmount = lesson.price * quantity;
+                totalAmount += lessonAmount;
+                lessonDetails.push({
+                    lessonId: lessonId,
+                    topic: lesson.topic,
+                    location: lesson.location,
+                    price: lesson.price,
+                    quantity: quantity,
+                    amount: lessonAmount
+                });
             }
 
-            // Create the order
+            // Create the order with enhanced details
             const orderData = {
-                name,
-                phone,
-                lessons,
+                name: name.trim(),
+                phone: phone.trim(),
+                lessons: lessonDetails,
+                totalAmount: totalAmount,
+                status: 'confirmed',
+                paymentStatus: 'pending',
                 createdAt: new Date(),
+                updatedAt: new Date()
             };
 
-            await ordersCollection.insertOne(orderData, { session });
-
-            res.status(201).json({ message: 'Order created successfully' });
+            const insertResult = await ordersCollection.insertOne(orderData, { session });
+            orderResult = {
+                _id: insertResult.insertedId,
+                ...orderData
+            };
         });
+
+        // Send confirmation response
+        res.status(201).json({
+            status: 'success',
+            message: 'Order created successfully',
+            data: {
+                order: orderResult,
+                confirmationNumber: orderResult._id.toString().substr(-8).toUpperCase()
+            }
+        });
+
     } catch (err) {
-        await session.abortTransaction(); // Abort transaction on error
-        console.error('Transaction error:', err);
-        res.status(500).json({ error: err.message });
+        await session.abortTransaction();
+        if (err instanceof AppError) throw err;
+        throw new AppError('Failed to create order', 500);
     } finally {
-        await session.endSession(); // End the session
+        await session.endSession();
     }
 }
 
-// Controller function to get all orders (optional)
+// Get all orders with pagination and filtering
 async function getAllOrders(req, res) {
+    const db = req.app.locals.db;
+    const ordersCollection = getOrdersCollection(db);
+    
+    const { 
+        page = 1, 
+        limit = 20,
+        status,
+        paymentStatus,
+        sortBy = 'createdAt',
+        order = 'desc'
+    } = req.query;
+
+    // Build filter
+    const filter = {};
+    if (status) filter.status = status;
+    if (paymentStatus) filter.paymentStatus = paymentStatus;
+
+    // Sorting
+    const sortOptions = {
+        [sortBy]: order === 'desc' ? -1 : 1
+    };
+
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    try {
+        const totalCount = await ordersCollection.countDocuments(filter);
+        
+        const orders = await ordersCollection
+            .find(filter)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray();
+
+        res.json({
+            status: 'success',
+            data: {
+                orders,
+                pagination: {
+                    total: totalCount,
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    pages: Math.ceil(totalCount / parseInt(limit))
+                }
+            }
+        });
+    } catch (err) {
+        throw new AppError('Failed to fetch orders', 500);
+    }
+}
+
+// Get order by ID
+async function getOrderById(req, res) {
+    const db = req.app.locals.db;
+    const ordersCollection = getOrdersCollection(db);
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+        throw new AppError('Invalid order ID format', 400);
+    }
+
+    try {
+        const order = await ordersCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!order) {
+            throw new AppError('Order not found', 404);
+        }
+
+        res.json({
+            status: 'success',
+            data: {
+                order,
+                confirmationNumber: order._id.toString().substr(-8).toUpperCase()
+            }
+        });
+    } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('Failed to fetch order', 500);
+    }
+}
+
+// Get order statistics
+async function getOrderStats(req, res) {
     const db = req.app.locals.db;
     const ordersCollection = getOrdersCollection(db);
 
     try {
-        const orders = await ordersCollection.find({}).toArray();
-        res.json(orders); // Send orders as JSON response
+        const stats = await ordersCollection.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalOrders: { $sum: 1 },
+                    totalRevenue: { $sum: '$totalAmount' },
+                    avgOrderValue: { $avg: '$totalAmount' },
+                    totalLessons: { $sum: { $size: '$lessons' } }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    totalOrders: 1,
+                    totalRevenue: { $round: ['$totalRevenue', 2] },
+                    avgOrderValue: { $round: ['$avgOrderValue', 2] },
+                    totalLessons: 1
+                }
+            }
+        ]).toArray();
+
+        // Orders by status
+        const byStatus = await ordersCollection.aggregate([
+            {
+                $group: {
+                    _id: '$status',
+                    count: { $sum: 1 }
+                }
+            }
+        ]).toArray();
+
+        // Recent orders trend (last 7 days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const dailyOrders = await ordersCollection.aggregate([
+            {
+                $match: {
+                    createdAt: { $gte: sevenDaysAgo }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: {
+                            format: '%Y-%m-%d',
+                            date: '$createdAt'
+                        }
+                    },
+                    count: { $sum: 1 },
+                    revenue: { $sum: '$totalAmount' }
+                }
+            },
+            {
+                $sort: { _id: 1 }
+            }
+        ]).toArray();
+
+        res.json({
+            status: 'success',
+            data: {
+                overview: stats[0] || {},
+                byStatus,
+                dailyTrend: dailyOrders
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message }); // Handle errors
+        throw new AppError('Failed to fetch order statistics', 500);
     }
 }
 
 module.exports = {
     createOrder,
     getAllOrders,
+    getOrderById,
+    getOrderStats
 };
