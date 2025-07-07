@@ -1,11 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const lessonController = require('../controllers/lessonController');
+const { lessonValidationRules, validate } = require('../middleware/validation');
+const { asyncHandler } = require('../middleware/errorHandler');
 
-// Route to get all lessons, possibly with filters
-router.get('/lessons', lessonController.getAllLessons);
+// Route to get all lessons with advanced filtering
+router.get('/', 
+    lessonValidationRules.getLessons,
+    validate,
+    asyncHandler(lessonController.getAllLessons)
+);
+
+// Route to get a single lesson by ID
+router.get('/:id',
+    asyncHandler(lessonController.getLessonById)
+);
 
 // Route to update a lesson by ID
-router.put('/lessons/:id', lessonController.updateLesson);
+router.put('/:id',
+    lessonValidationRules.updateLesson,
+    validate,
+    asyncHandler(lessonController.updateLesson)
+);
+
+// Route to get lesson statistics
+router.get('/stats/overview',
+    asyncHandler(lessonController.getLessonStats)
+);
 
 module.exports = router;
